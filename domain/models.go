@@ -6,12 +6,13 @@ import (
 )
 
 type Material struct {
-	ID             string  `json:"id,omitempty"`
-	Code           string  `json:"code"`
-	Name           string  `json:"name"`
-	DensityKgPerM3 float64 `json:"densityKgPerM3"`
+	ID                     string  `json:"id,omitempty"`
+	Code                   string  `json:"code"`
+	Name                   string  `json:"name"`
+	Type                   string  `json:"type,omitempty"`
+	DensityKgPerM3         float64 `json:"densityKgPerM3"`
 	CoverageRateM2PerRonne float64 `json:"coverageRateM2PerRonne,omitempty"`
-	Comment        string  `json:"comment,omitempty"`
+	Comment                string  `json:"comment,omitempty"`
 }
 
 type WallDimenstions struct {
@@ -38,6 +39,7 @@ type CalcualtionRequest struct {
 	Material             *Material       `json:"material,omitempty"`
 	Wall                 WallDimenstions `json:"wall"`
 	Voids                []Void          `json:"voids,omitempty"`
+	Pattern              string          `json:"pattern,omitempty"`
 	JointWidthM          float64         `json:"jointWidthM,omitempty"`
 	JointDepthM          float64         `json:"jointDepthM,omitempty"`
 	WastePercent         float64         `json:"wastePercent,omitempty"`
@@ -61,7 +63,7 @@ func (r *CalcualtionRequest) Validate() error {
 	if r.WastePercent < 0 {
 		return fmt.Errorf("wastePercent cannot be negative")
 	}
-	if r.ComplexityMultiplier < 1.0 {
+	if r.ComplexityMultiplier != 0 && r.ComplexityMultiplier < 1.0 {
 		return fmt.Errorf("complexityMultiplier must be >= 1.0")
 	}
 	if r.JointWidthM < 0 || r.JointDepthM < 0 {
