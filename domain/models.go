@@ -6,12 +6,12 @@ import (
 )
 
 type Material struct {
-	ID                     string  `json:"id,omitempty"`
-	Code                   string  `json:"code"`
-	Name                   string  `json:"name"`
-	DensityKgPerM3         float64 `json:"densityKgPerM3"`
-	CoverageRateM2PerTonne float64 `json:"coverageRateM2PerTonne,omitempty"`
-	Comment                string  `json:"comment,omitempty"`
+	ID             string  `json:"id,omitempty"`
+	Code           string  `json:"code"`
+	Name           string  `json:"name"`
+	DensityKgPerM3 float64 `json:"densityKgPerM3"`
+	CoverageRateM2PerRonne float64 `json:"coverageRateM2PerRonne,omitempty"`
+	Comment        string  `json:"comment,omitempty"`
 }
 
 type WallDimenstions struct {

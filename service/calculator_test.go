@@ -2,13 +2,12 @@ package service
 
 import (
 	"context"
+	"estimation/domain"
 	"math"
 	"testing"
-
-	"estimation/domain"
 )
 
-func TestCalculateSurfaceAreaSubtractsVoids(t *testing.T) {
+func TestCalculatesurfaceAreaSubtractsVoid(t *testing.T) {
 	got, err := CalculateSurfaceArea(domain.WallDimenstions{
 		LengthM: 10,
 		HeightM: 3,
@@ -41,14 +40,14 @@ func TestCalculateSurfaceAreaRejectsTotalVoidsOverWallArea(t *testing.T) {
 func TestCalculateStoneTonnageUsesDensityCoverageWasteAndComplexity(t *testing.T) {
 	got, err := CalculateStoneTonnage(20, 0.2, domain.Material{
 		DensityKgPerM3:         2400,
-		CoverageRateM2PerTonne: 1.5,
+		CoverageRateM2PerRonne: 1.5,
 	}, 0.10, 1.2)
 	if err != nil {
 		t.Fatalf("CalculateStoneTonnage returned error: %v", err)
 	}
 
 	assertFloat(t, got.VolumeM3, 4)
-	assertFloat(t, got.WasteStoneKg, 1333.3333333333335)
+	assertFloat(t, got.WasteStoneKg, 1333.33)
 	assertFloat(t, got.StoneMassKg, 17600)
 	assertFloat(t, got.StoneTonnage, 17.6)
 }
@@ -82,7 +81,7 @@ func TestCalculatorEstimate(t *testing.T) {
 	got, err := calculator.Estimate(context.Background(), domain.CalcualtionRequest{
 		Material: &domain.Material{
 			DensityKgPerM3:         2500,
-			CoverageRateM2PerTonne: 2,
+			CoverageRateM2PerRonne: 2,
 		},
 		Wall: domain.WallDimenstions{
 			LengthM:    6,
@@ -112,6 +111,6 @@ func TestCalculatorEstimate(t *testing.T) {
 func assertFloat(t *testing.T, got, want float64) {
 	t.Helper()
 	if math.Abs(got-want) > 1e-9 {
-		t.Fatalf("got %f, want %f", got, want)
+		t.Errorf("got %f, want %f", got, want)
 	}
 }
