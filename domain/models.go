@@ -10,6 +10,7 @@ type Material struct {
 	Code           string  `json:"code"`
 	Name           string  `json:"name"`
 	DensityKgPerM3 float64 `json:"densityKgPerM3"`
+	CoverageRateM2PerRonne float64 `json:"coverageRateM2PerRonne,omitempty"`
 	Comment        string  `json:"comment,omitempty"`
 }
 
