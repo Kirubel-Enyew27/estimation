@@ -47,9 +47,62 @@ func TestCalculateStoneTonnageUsesDensityCoverageWasteAndComplexity(t *testing.T
 	}
 
 	assertFloat(t, got.VolumeM3, 4)
-	assertFloat(t, got.WasteStoneKg, 1333.33)
+	assertFloat(t, got.WasteStoneKg, 1333.3333333333335)
 	assertFloat(t, got.StoneMassKg, 17600)
 	assertFloat(t, got.StoneTonnage, 17.6)
+}
+
+func TestApplyMultipliersUsesMaterialTypeAndPatternDefaults(t *testing.T) {
+	calculator := NewCalculator()
+
+	got := calculator.ApplyMultipliers(domain.CalcualtionRequest{
+		Material: &domain.Material{
+			Type: "Brick",
+		},
+		Pattern: "Herringbone",
+	})
+
+	assertFloat(t, got.WastePercent, 0.10)
+	assertFloat(t, got.ComplexityMultiplier, 1.20)
+}
+
+func TestApplyMultipliersCanBeConfigured(t *testing.T) {
+	calculator := NewCalculatorWithConfig(MultiplierConfig{
+		MaterialWastePercent: map[string]float64{
+			"limestone": 0.18,
+		},
+		PatternComplexityMultipliers: map[string]float64{
+			"coursed random": 1.35,
+		},
+		DefaultWastePercent: 0.05,
+		DefaultComplexityMultiplier: 1.05,
+	})
+
+	got := calculator.ApplyMultipliers(domain.CalcualtionRequest{
+		Material: &domain.Material{
+			Type: "Limestone",
+		},
+		Pattern: "Coursed Random",
+	})
+
+	assertFloat(t, got.WastePercent, 0.18)
+	assertFloat(t, got.ComplexityMultiplier, 1.35)
+}
+
+func TestApplyMultipliersLetsExplicitRequestValuesOverrideConfig(t *testing.T) {
+	calculator := NewCalculator()
+
+	got := calculator.ApplyMultipliers(domain.CalcualtionRequest{
+		Material: &domain.Material{
+			Type: "Fieldstone",
+		},
+		Pattern: "Herringbone",
+		WastePercent: 0.08,
+		ComplexityMultiplier: 1.05,
+	})
+
+	assertFloat(t, got.WastePercent, 0.08)
+	assertFloat(t, got.ComplexityMultiplier, 1.05)
 }
 
 func TestCalculateStoneTonnageFallsBackToDensityWhenCoverageIsUnset(t *testing.T) {
@@ -73,6 +126,34 @@ func TestCalculateMortarUsesJointWidthAndDepth(t *testing.T) {
 
 	assertFloat(t, volume, 0.006)
 	assertFloat(t, mass, 12.96)
+}
+
+func TestCalculatorEstimateAppliesConfiguredMultipliersToFinalMaterialsEstimate(t *testing.T) {
+	Calcualator := NewCalculator()
+
+	got, err := Calcualator.Estimate(context.Background(), domain.CalcualtionRequest{
+		Material: &domain.Material{
+			Type: "Fieldstone",
+			DensityKgPerM3: 2000,
+		},
+		Wall: domain.WallDimenstions{
+			LengthM: 5,
+			HeightM: 2,
+			ThicknessM: 0.2,
+		},
+		Pattern: "Herringbone",
+	})
+	if err != nil {
+		t.Fatalf("Estimate returned error: %v", err)
+	}
+
+	assertFloat(t, got.SurfaceAreaM2, 10)
+	assertFloat(t, got.VolumeM3, 2)
+	assertFloat(t, got.WasteStoneKg, 1000)
+	assertFloat(t, got.StoneMassKg, 6000)
+	assertFloat(t, got.StoneTonnage, 6)
+	assertFloat(t, got.AppliedComplexityMultiplier, 1.2)
+	assertFloat(t, got.BreakDown["wastePercent"], 0.25)
 }
 
 func TestCalculatorEstimate(t *testing.T) {

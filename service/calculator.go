@@ -5,12 +5,26 @@ import (
 	"errors"
 	"estimation/domain"
 	"fmt"
+	"strings"
 )
 
 const MortarDensityKgPerM3 = 2160
 
-type Calcualator struct{}
+type Calcualator struct {
+	multipliers MultiplierConfig
+}
 
+type MultiplierConfig struct {
+	MaterialWastePercent         map[string]float64
+	PatternComplexityMultipliers map[string]float64
+	DefaultWastePercent          float64
+	DefaultComplexityMultiplier  float64
+}
+
+type AppliedMultipliers struct {
+	WastePercent         float64
+	ComplexityMultiplier float64
+}
 type SurfaceAreaCalculation struct {
 	TotalWallAreaM2 float64
 	VoidAreaM2      float64
@@ -25,7 +39,29 @@ type StoneCalculation struct {
 }
 
 func NewCalculator() *Calcualator {
-	return &Calcualator{}
+	return NewCalculatorWithConfig(DefaultMultiplierConfig())
+}
+
+func NewCalculatorWithConfig(config MultiplierConfig) *Calcualator {
+	config = normalizeMultiplierConfig(config)
+	return &Calcualator{multipliers: config}
+}
+
+func DefaultMultiplierConfig() MultiplierConfig {
+	return MultiplierConfig{
+		MaterialWastePercent: map[string]float64{
+			"brick":      0.10,
+			"fieldstone": 0.25,
+		},
+		PatternComplexityMultipliers: map[string]float64{
+			"running-bond": 1.00,
+			"stacked":      1.00,
+			"ashlar":       1.10,
+			"herringbone":  1.20,
+		},
+		DefaultWastePercent:         0,
+		DefaultComplexityMultiplier: 1,
+	}
 }
 
 func (c *Calcualator) Estimate(ctx context.Context, req domain.CalcualtionRequest) (domain.CalculationResult, error) {
@@ -44,8 +80,9 @@ func (c *Calcualator) Estimate(ctx context.Context, req domain.CalcualtionReques
 		return domain.CalculationResult{}, err
 	}
 
+	multipliers := c.ApplyMultipliers(req)
 	stone, err := CalculateStoneTonnage(surface.NetAreaM2, req.Wall.ThicknessM, *req.Material,
-		req.WastePercent, req.ComplexityMultiplier)
+		multipliers.WastePercent, multipliers.ComplexityMultiplier)
 	if err != nil {
 		return domain.CalculationResult{}, err
 	}
@@ -56,11 +93,13 @@ func (c *Calcualator) Estimate(ctx context.Context, req domain.CalcualtionReques
 		StoneMassKg:                 stone.StoneMassKg,
 		StoneTonnage:                stone.StoneTonnage,
 		WasteStoneKg:                stone.WasteStoneKg,
-		AppliedComplexityMultiplier: req.ComplexityMultiplier,
+		AppliedComplexityMultiplier: multipliers.ComplexityMultiplier,
 		BreakDown: map[string]float64{
-			"totalWallAreaM2": surface.TotalWallAreaM2,
-			"voidAreaM2":      surface.VoidAreaM2,
-			"netWallAreaM2":   surface.NetAreaM2,
+			"totalWallAreaM2":      surface.TotalWallAreaM2,
+			"voidAreaM2":           surface.VoidAreaM2,
+			"netWallAreaM2":        surface.NetAreaM2,
+			"wastePercent":         multipliers.WastePercent,
+			"complexityMultiplier": multipliers.ComplexityMultiplier,
 		},
 	}
 
@@ -74,6 +113,42 @@ func (c *Calcualator) Estimate(ctx context.Context, req domain.CalcualtionReques
 	}
 
 	return result, nil
+}
+
+func (c *Calcualator) ApplyMultipliers(req domain.CalcualtionRequest) AppliedMultipliers {
+	config := c.multipliers
+	if config.DefaultComplexityMultiplier == 0 {
+		config.DefaultComplexityMultiplier = 1
+	}
+
+	wastePercent := config.DefaultWastePercent
+	if req.Material != nil {
+		for _, key := range []string{req.Material.Type, req.Material.Code, req.Material.Name} {
+			if configuredWaste, ok := config.MaterialWastePercent[key]; ok {
+				wastePercent = configuredWaste
+				break
+			}
+		}
+	}
+	if configuredWaste, ok := config.MaterialWastePercent[normalizeMultiplierKey(req.MaterialCode)]; ok {
+		wastePercent = configuredWaste
+	}
+	if req.WastePercent > 0 {
+		wastePercent = req.WastePercent
+	}
+
+	complexityMultiplier := config.DefaultComplexityMultiplier
+	if configuredComplexity, ok := config.PatternComplexityMultipliers[normalizeMultiplierKey(req.Pattern)]; ok {
+		complexityMultiplier = configuredComplexity
+	}
+	if req.ComplexityMultiplier > 0 {
+		complexityMultiplier = req.ComplexityMultiplier
+	}
+
+	return AppliedMultipliers{
+		WastePercent:         wastePercent,
+		ComplexityMultiplier: complexityMultiplier,
+	}
 }
 
 func CalculateSurfaceArea(wall domain.WallDimenstions, voids []domain.Void) (SurfaceAreaCalculation, error) {
@@ -153,4 +228,32 @@ func CalculateMortar(netAreaM2, jointWidthM, jointDepthM float64) (float64, floa
 
 	volumeM3 := netAreaM2 * jointWidthM * jointDepthM
 	return volumeM3, volumeM3 * MortarDensityKgPerM3, nil
+}
+
+func normalizeMultiplierConfig(config MultiplierConfig) MultiplierConfig {
+	if config.MaterialWastePercent == nil {
+		config.MaterialWastePercent = map[string]float64{}
+	}
+	if config.PatternComplexityMultipliers == nil {
+		config.PatternComplexityMultipliers = map[string]float64{}
+	}
+	if config.DefaultComplexityMultiplier == 0 {
+		config.DefaultComplexityMultiplier = 1
+	}
+
+	config.MaterialWastePercent = normalizeFloatMapKeys(config.MaterialWastePercent)
+	config.PatternComplexityMultipliers = normalizeFloatMapKeys(config.PatternComplexityMultipliers)
+	return config
+}
+
+func normalizeFloatMapKeys(values map[string]float64) map[string]float64 {
+	normalized := make(map[string]float64, len(values))
+	for key, value := range values {
+		normalized[normalizeMultiplierKey(key)] = value
+	}
+	return normalized
+}
+
+func normalizeMultiplierKey(value string) string {
+	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(value), " ", "-"))
 }
