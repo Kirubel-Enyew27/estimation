@@ -91,6 +91,9 @@ func (c *Calculator) Estimate(ctx context.Context, req domain.CalculationRequest
 
 		material, err := c.materials.GetByType(ctx, req.MaterialCode)
 		if err != nil {
+			if errors.Is(err, ErrMaterialNotFound) {
+				return domain.CalculationResult{}, fmt.Errorf("%w: material type %q does not exist", ErrMaterialNotFound, req.MaterialCode)
+			}
 			return domain.CalculationResult{}, fmt.Errorf("lookup material type %q: %w", req.MaterialCode, err)
 		}
 		req.Material = material

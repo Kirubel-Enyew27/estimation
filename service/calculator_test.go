@@ -397,6 +397,9 @@ func TestCalculatorEstimateReturnsNotFoundForUnknownMaterial(t *testing.T) {
 	if !errors.Is(err, ErrMaterialNotFound) {
 		t.Fatalf("got error %v, want ErrMaterialNotFound", err)
 	}
+	if !strings.Contains(err.Error(), `material type "granite" does not exist`) {
+		t.Fatalf("got error %q, want clear unknown material message", err.Error())
+	}
 }
 
 type fakeMaterialRepository map[string]domain.Material

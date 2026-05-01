@@ -1,6 +1,9 @@
 package domain
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestCalculationRequestValidate(t *testing.T) {
 	req := CalculationRequest{
@@ -25,7 +28,7 @@ func TestCalculatonRequestValidate_Invalid(t *testing.T) {
 	cases := []struct {
 		name    string
 		req     CalculationRequest
-		wantErr bool
+		wantErr string
 	}{
 		{"missing material", CalculationRequest{
 			Wall: WallDimensions{
@@ -33,7 +36,7 @@ func TestCalculatonRequestValidate_Invalid(t *testing.T) {
 				HeightM:    1,
 				ThicknessM: 0.2},
 			ComplexityMultiplier: 1.0,
-		}, true},
+		}, "material must be provided"},
 		{"zero length", CalculationRequest{
 			MaterialCode: "X",
 			Wall: WallDimensions{
@@ -41,7 +44,15 @@ func TestCalculatonRequestValidate_Invalid(t *testing.T) {
 				HeightM:    1,
 				ThicknessM: 0.2},
 			ComplexityMultiplier: 1.0,
-		}, true},
+		}, "wall.lengthM must be > 0"},
+		{"negative thickness", CalculationRequest{
+			MaterialCode: "X",
+			Wall: WallDimensions{
+				LengthM:    1,
+				HeightM:    1,
+				ThicknessM: -0.2},
+			ComplexityMultiplier: 1.0,
+		}, "wall.thicknessM must be >= 0"},
 		{"negative waste", CalculationRequest{
 			MaterialCode: "X",
 			Wall: WallDimensions{
@@ -50,7 +61,7 @@ func TestCalculatonRequestValidate_Invalid(t *testing.T) {
 				ThicknessM: 0.2},
 			WastePercent:         -0.1,
 			ComplexityMultiplier: 1.0,
-		}, true},
+		}, "wastePercent cannot be negative"},
 		{"complexity < 1", CalculationRequest{
 			MaterialCode: "X",
 			Wall: WallDimensions{
@@ -58,25 +69,62 @@ func TestCalculatonRequestValidate_Invalid(t *testing.T) {
 				HeightM:    1,
 				ThicknessM: 0.2},
 			ComplexityMultiplier: 0.5,
-		}, true},
-		{"void too large", CalculationRequest{
+		}, "complexityMultiplier must be >= 1.0"},
+		{"void negative width", CalculationRequest{
 			MaterialCode: "X",
 			Wall: WallDimensions{
 				LengthM:    2,
 				HeightM:    2,
 				ThicknessM: 0.2},
 			Voids: []Void{
-				{WidthM: 10, HeightM: 10},
+				{WidthM: -1, HeightM: 1},
 			},
 			ComplexityMultiplier: 1.0,
-		}, true},
+		}, "void[0].widthM must be >= 0"},
+		{"void width exceeds wall", CalculationRequest{
+			MaterialCode: "X",
+			Wall: WallDimensions{
+				LengthM:    2,
+				HeightM:    2,
+				ThicknessM: 0.2},
+			Voids: []Void{
+				{WidthM: 3, HeightM: 1},
+			},
+			ComplexityMultiplier: 1.0,
+		}, "void[0].widthM must be <= wall.lengthM"},
+		{"void height exceeds wall", CalculationRequest{
+			MaterialCode: "X",
+			Wall: WallDimensions{
+				LengthM:    2,
+				HeightM:    2,
+				ThicknessM: 0.2},
+			Voids: []Void{
+				{WidthM: 1, HeightM: 3},
+			},
+			ComplexityMultiplier: 1.0,
+		}, "void[0].heightM must be <= wall.heightM"},
+		{"total void area too large", CalculationRequest{
+			MaterialCode: "X",
+			Wall: WallDimensions{
+				LengthM:    2,
+				HeightM:    2,
+				ThicknessM: 0.2},
+			Voids: []Void{
+				{WidthM: 2, HeightM: 2},
+				{WidthM: 1, HeightM: 1},
+			},
+			ComplexityMultiplier: 1.0,
+		}, "total void area"},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			err := c.req.Validate()
-			if (err != nil) != c.wantErr {
-				t.Errorf("case %q: expected wantErr=%v, got err=%v", c.name, c.wantErr, err)
+			if err == nil {
+				t.Fatalf("expected error containing %q", c.wantErr)
+			}
+			if !strings.Contains(err.Error(), c.wantErr) {
+				t.Fatalf("got error %q, want it to contain %q", err.Error(), c.wantErr)
 			}
 		})
 	}
