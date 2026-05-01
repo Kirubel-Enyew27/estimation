@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"estimation/domain"
-	"estimation/store"
+	"fmt"
 	"math"
+	"strings"
 	"testing"
 )
 
 func TestCalculatesurfaceAreaSubtractsVoid(t *testing.T) {
-	got, err := CalculateSurfaceArea(domain.WallDimenstions{
+	got, err := CalculateSurfaceArea(domain.WallDimensions{
 		LengthM: 10,
 		HeightM: 3,
 	}, []domain.Void{
@@ -27,7 +28,7 @@ func TestCalculatesurfaceAreaSubtractsVoid(t *testing.T) {
 }
 
 func TestCalculateSurfaceAreaRejectsTotalVoidsOverWallArea(t *testing.T) {
-	_, err := CalculateSurfaceArea(domain.WallDimenstions{
+	_, err := CalculateSurfaceArea(domain.WallDimensions{
 		LengthM: 2,
 		HeightM: 2,
 	}, []domain.Void{
@@ -42,15 +43,15 @@ func TestCalculateSurfaceAreaRejectsTotalVoidsOverWallArea(t *testing.T) {
 func TestCalculateSurfaceAreaRejectsZeroDimensions(t *testing.T) {
 	cases := []struct {
 		name string
-		wall domain.WallDimenstions
+		wall domain.WallDimensions
 	}{
 		{
 			name: "zero length",
-			wall: domain.WallDimenstions{LengthM: 0, HeightM: 3},
+			wall: domain.WallDimensions{LengthM: 0, HeightM: 3},
 		},
 		{
 			name: "zero height",
-			wall: domain.WallDimenstions{LengthM: 3, HeightM: 0},
+			wall: domain.WallDimensions{LengthM: 3, HeightM: 0},
 		},
 	}
 
@@ -88,7 +89,7 @@ func TestCalculateSurfaceAreaRejectsInvalidVoidSizes(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := CalculateSurfaceArea(domain.WallDimenstions{
+			_, err := CalculateSurfaceArea(domain.WallDimensions{
 				LengthM: 2,
 				HeightM: 2,
 			}, tc.voids)
@@ -117,7 +118,7 @@ func TestCalculateStoneTonnageUsesDensityCoverageWasteAndComplexity(t *testing.T
 func TestApplyMultipliersUsesMaterialTypeAndPatternDefaults(t *testing.T) {
 	calculator := NewCalculator()
 
-	got := calculator.ApplyMultipliers(domain.CalcualtionRequest{
+	got := calculator.ApplyMultipliers(domain.CalculationRequest{
 		Material: &domain.Material{
 			Type: "Brick",
 		},
@@ -140,7 +141,7 @@ func TestApplyMultipliersCanBeConfigured(t *testing.T) {
 		DefaultComplexityMultiplier: 1.05,
 	})
 
-	got := calculator.ApplyMultipliers(domain.CalcualtionRequest{
+	got := calculator.ApplyMultipliers(domain.CalculationRequest{
 		Material: &domain.Material{
 			Type: "Limestone",
 		},
@@ -154,7 +155,7 @@ func TestApplyMultipliersCanBeConfigured(t *testing.T) {
 func TestApplyMultipliersLetsExplicitRequestValuesOverrideConfig(t *testing.T) {
 	calculator := NewCalculator()
 
-	got := calculator.ApplyMultipliers(domain.CalcualtionRequest{
+	got := calculator.ApplyMultipliers(domain.CalculationRequest{
 		Material: &domain.Material{
 			Type: "Fieldstone",
 		},
@@ -179,7 +180,7 @@ func TestApplyMultipliersUsesDefaultsForUnknownMaterialAndPattern(t *testing.T) 
 		DefaultComplexityMultiplier: 1.05,
 	})
 
-	got := calculator.ApplyMultipliers(domain.CalcualtionRequest{
+	got := calculator.ApplyMultipliers(domain.CalculationRequest{
 		Material: &domain.Material{
 			Type: "granite",
 		},
@@ -198,7 +199,7 @@ func TestApplyMultipliersUsesMaterialCodeWhenInlineMaterialDoesNotMatch(t *testi
 		DefaultComplexityMultiplier: 1,
 	})
 
-	got := calculator.ApplyMultipliers(domain.CalcualtionRequest{
+	got := calculator.ApplyMultipliers(domain.CalculationRequest{
 		MaterialCode: "brick",
 		Material: &domain.Material{
 			Type: "unknown",
@@ -265,14 +266,14 @@ func TestCalculateMortarRejectsInvalidInputs(t *testing.T) {
 }
 
 func TestCalculatorEstimateAppliesConfiguredMultipliersToFinalMaterialsEstimate(t *testing.T) {
-	Calcualator := NewCalculator()
+	calculator := NewCalculator()
 
-	got, err := Calcualator.Estimate(context.Background(), domain.CalcualtionRequest{
+	got, err := calculator.Estimate(context.Background(), domain.CalculationRequest{
 		Material: &domain.Material{
 			Type:           "Fieldstone",
 			DensityKgPerM3: 2000,
 		},
-		Wall: domain.WallDimenstions{
+		Wall: domain.WallDimensions{
 			LengthM:    5,
 			HeightM:    2,
 			ThicknessM: 0.2,
@@ -289,18 +290,18 @@ func TestCalculatorEstimateAppliesConfiguredMultipliersToFinalMaterialsEstimate(
 	assertFloat(t, got.StoneMassKg, 6000)
 	assertFloat(t, got.StoneTonnage, 6)
 	assertFloat(t, got.AppliedComplexityMultiplier, 1.2)
-	assertFloat(t, got.BreakDown["wastePercent"], 0.25)
+	assertFloat(t, got.Breakdown["wastePercent"], 0.25)
 }
 
 func TestCalculatorEstimate(t *testing.T) {
 	calculator := NewCalculator()
 
-	got, err := calculator.Estimate(context.Background(), domain.CalcualtionRequest{
+	got, err := calculator.Estimate(context.Background(), domain.CalculationRequest{
 		Material: &domain.Material{
 			DensityKgPerM3:         2500,
 			CoverageRateM2PerRonne: 2,
 		},
-		Wall: domain.WallDimenstions{
+		Wall: domain.WallDimensions{
 			LengthM:    6,
 			HeightM:    2.5,
 			ThicknessM: 0.2,
@@ -327,22 +328,19 @@ func TestCalculatorEstimate(t *testing.T) {
 }
 
 func TestCalculatorEstimateLookUpMaterialByType(t *testing.T) {
-	catalog, err := store.NewMaterialCatalog([]domain.Material{
-		{
+	catalog := fakeMaterialRepository{
+		"limestone": {
 			Type:                   "limestone",
 			DensityKgPerM3:         2300,
 			CostPerTon:             110,
 			CoverageRateM2PerRonne: 1.7,
 		},
-	})
-	if err != nil {
-		t.Fatalf("NewMaterialCatalog returned error: %v", err)
 	}
 
-	Calculator := NewCalculatorWithMaterialStore(catalog)
-	got, err := Calculator.Estimate(context.Background(), domain.CalcualtionRequest{
+	calculator := NewCalculatorWithMaterialRepository(catalog)
+	got, err := calculator.Estimate(context.Background(), domain.CalculationRequest{
 		MaterialCode: "Limestone",
-		Wall: domain.WallDimenstions{
+		Wall: domain.WallDimensions{
 			LengthM:    6,
 			HeightM:    2,
 			ThicknessM: 0.2,
@@ -360,11 +358,11 @@ func TestCalculatorEstimateLookUpMaterialByType(t *testing.T) {
 }
 
 func TestCalculatorEstimateRequiresConfiguredCatalogForMaterialCode(t *testing.T) {
-	Calcualator := NewCalculator()
+	calculator := NewCalculator()
 
-	_, err := Calcualator.Estimate(context.Background(), domain.CalcualtionRequest{
+	_, err := calculator.Estimate(context.Background(), domain.CalculationRequest{
 		MaterialCode: "brick",
-		Wall: domain.WallDimenstions{
+		Wall: domain.WallDimensions{
 			LengthM:    1,
 			HeightM:    1,
 			ThicknessM: 0.2,
@@ -377,31 +375,56 @@ func TestCalculatorEstimateRequiresConfiguredCatalogForMaterialCode(t *testing.T
 }
 
 func TestCalculatorEstimateReturnsNotFoundForUnknownMaterial(t *testing.T) {
-	catalog, err := store.NewMaterialCatalog([]domain.Material{
-		{
+	catalog := fakeMaterialRepository{
+		"brick": {
 			Type:                   "brick",
 			DensityKgPerM3:         1800,
 			CostPerTon:             65,
 			CoverageRateM2PerRonne: 2.2,
 		},
-	})
-	if err != nil {
-		t.Fatalf("NewMaterialCatalog returned error: %v", err)
 	}
 
-	calculator := NewCalculatorWithMaterialStore(catalog)
-	_, err = calculator.Estimate(context.Background(), domain.CalcualtionRequest{
+	calculator := NewCalculatorWithMaterialRepository(catalog)
+	_, err := calculator.Estimate(context.Background(), domain.CalculationRequest{
 		MaterialCode: "granite",
-		Wall: domain.WallDimenstions{
+		Wall: domain.WallDimensions{
 			LengthM:    1,
 			HeightM:    1,
 			ThicknessM: 0.2,
 		},
 		ComplexityMultiplier: 1,
 	})
-	if !errors.Is(err, store.ErrNotFound) {
-		t.Fatalf("got error %v, want ErrNotFound", err)
+	if !errors.Is(err, ErrMaterialNotFound) {
+		t.Fatalf("got error %v, want ErrMaterialNotFound", err)
 	}
+}
+
+type fakeMaterialRepository map[string]domain.Material
+
+func (r fakeMaterialRepository) GetByType(ctx context.Context, materialType string) (*domain.Material, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	material, ok := r[strings.ToLower(strings.TrimSpace(materialType))]
+	if !ok {
+		return nil, fmt.Errorf("%w: material type %q", ErrMaterialNotFound, materialType)
+	}
+
+	copied := material
+	return &copied, nil
+}
+
+func (r fakeMaterialRepository) List(ctx context.Context) ([]domain.Material, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	materials := make([]domain.Material, 0, len(r))
+	for _, material := range r {
+		materials = append(materials, material)
+	}
+	return materials, nil
 }
 
 func assertFloat(t *testing.T, got, want float64) {

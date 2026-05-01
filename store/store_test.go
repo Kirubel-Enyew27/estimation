@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"estimation/service"
 	"os"
 	"path/filepath"
 	"testing"
@@ -81,8 +82,8 @@ func TestMaterialCatalogReturnsNotFoundForUnknownType(t *testing.T) {
 	}
 
 	_, err = catalog.GetByType(context.Background(), "granite")
-	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("got err %v, want ErrNotFound", err)
+	if !errors.Is(err, service.ErrMaterialNotFound) {
+		t.Fatalf("got err %v, want ErrMaterialNotFound", err)
 	}
 }
 

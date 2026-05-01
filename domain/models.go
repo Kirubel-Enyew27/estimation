@@ -5,6 +5,8 @@ import (
 	"fmt"
 )
 
+var ErrMaterialNotFound = errors.New("material not found")
+
 type Material struct {
 	ID                     string  `json:"id,omitempty"`
 	Code                   string  `json:"code"`
@@ -16,13 +18,13 @@ type Material struct {
 	Comment                string  `json:"comment,omitempty"`
 }
 
-type WallDimenstions struct {
+type WallDimensions struct {
 	LengthM    float64 `json:"lengthM"`
 	HeightM    float64 `json:"heightM"`
 	ThicknessM float64 `json:"thicknessM"`
 }
 
-func (w WallDimenstions) SurfaceArea() float64 {
+func (w WallDimensions) SurfaceArea() float64 {
 	return w.LengthM * w.HeightM
 }
 
@@ -34,21 +36,21 @@ type Void struct {
 
 func (v Void) Area() float64 { return v.WidthM * v.HeightM }
 
-type CalcualtionRequest struct {
-	ProjectID            string          `json:"projectId,omitempty"`
-	MaterialCode         string          `json:"materialCode,omitempty"`
-	Material             *Material       `json:"material,omitempty"`
-	Wall                 WallDimenstions `json:"wall"`
-	Voids                []Void          `json:"voids,omitempty"`
-	Pattern              string          `json:"pattern,omitempty"`
-	JointWidthM          float64         `json:"jointWidthM,omitempty"`
-	JointDepthM          float64         `json:"jointDepthM,omitempty"`
-	WastePercent         float64         `json:"wastePercent,omitempty"`
-	ComplexityMultiplier float64         `json:"complexityMultiplier,omitempty"`
-	IncludeMortar        bool            `json:"includeMortar,omitempty"`
+type CalculationRequest struct {
+	ProjectID            string         `json:"projectId,omitempty"`
+	MaterialCode         string         `json:"materialCode,omitempty"`
+	Material             *Material      `json:"material,omitempty"`
+	Wall                 WallDimensions `json:"wall"`
+	Voids                []Void         `json:"voids,omitempty"`
+	Pattern              string         `json:"pattern,omitempty"`
+	JointWidthM          float64        `json:"jointWidthM,omitempty"`
+	JointDepthM          float64        `json:"jointDepthM,omitempty"`
+	WastePercent         float64        `json:"wastePercent,omitempty"`
+	ComplexityMultiplier float64        `json:"complexityMultiplier,omitempty"`
+	IncludeMortar        bool           `json:"includeMortar,omitempty"`
 }
 
-func (r *CalcualtionRequest) Validate() error {
+func (r *CalculationRequest) Validate() error {
 	if r.Material == nil && r.MaterialCode == "" {
 		return errors.New("material must be provided either by code or inline")
 	}
@@ -57,10 +59,10 @@ func (r *CalcualtionRequest) Validate() error {
 			return fmt.Errorf("material.density must be > 0, got %f", r.Material.DensityKgPerM3)
 		}
 		if r.Material.CostPerTon < 0 {
-			return fmt.Errorf("material.coverage_rate must be >= 0, got %f", r.Material.CostPerTon)
+			return fmt.Errorf("material.cost_per_ton must be >= 0, got %f", r.Material.CostPerTon)
 		}
 		if r.Material.CoverageRateM2PerRonne < 0 {
-			return fmt.Errorf("material.coverage_rate musst be >= 0, got %f", r.Material.CoverageRateM2PerRonne)
+			return fmt.Errorf("material.coverage_rate must be >= 0, got %f", r.Material.CoverageRateM2PerRonne)
 		}
 	}
 	if r.Wall.LengthM <= 0 {
@@ -103,5 +105,5 @@ type CalculationResult struct {
 	MortarMassKg                float64            `json:"mortarMassKg,omitempty"`
 	WasteStoneKg                float64            `json:"wasteStoneKg,omitempty"`
 	AppliedComplexityMultiplier float64            `json:"appliedComplexityMultiplier"`
-	BreakDown                   map[string]float64 `json:"breakDown,omitempty"`
+	Breakdown                   map[string]float64 `json:"breakDown,omitempty"`
 }

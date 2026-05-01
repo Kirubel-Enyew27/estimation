@@ -4,16 +4,15 @@ import (
 	"context"
 	"errors"
 	"estimation/domain"
-	"estimation/store"
 	"fmt"
 	"strings"
 )
 
 const MortarDensityKgPerM3 = 2160
 
-type Calcualator struct {
+type Calculator struct {
 	multipliers MultiplierConfig
-	materials   store.MaterialStore
+	materials   MaterialRepository
 }
 
 type MultiplierConfig struct {
@@ -40,22 +39,22 @@ type StoneCalculation struct {
 	WasteStoneKg float64
 }
 
-func NewCalculator() *Calcualator {
+func NewCalculator() *Calculator {
 	return NewCalculatorWithConfig(DefaultMultiplierConfig())
 }
 
-func NewCalculatorWithConfig(config MultiplierConfig) *Calcualator {
+func NewCalculatorWithConfig(config MultiplierConfig) *Calculator {
 	config = normalizeMultiplierConfig(config)
-	return &Calcualator{multipliers: config}
+	return &Calculator{multipliers: config}
 }
 
-func NewCalculatorWithMaterialStore(materials store.MaterialStore) *Calcualator {
-	return NewCalculatorWithConfigAndMaterialStore(DefaultMultiplierConfig(), materials)
+func NewCalculatorWithMaterialRepository(materials MaterialRepository) *Calculator {
+	return NewCalculatorWithConfigAndMaterialRepository(DefaultMultiplierConfig(), materials)
 }
 
-func NewCalculatorWithConfigAndMaterialStore(config MultiplierConfig, materials store.MaterialStore) *Calcualator {
+func NewCalculatorWithConfigAndMaterialRepository(config MultiplierConfig, materials MaterialRepository) *Calculator {
 	config = normalizeMultiplierConfig(config)
-	return &Calcualator{
+	return &Calculator{
 		multipliers: config,
 		materials:   materials,
 	}
@@ -78,7 +77,7 @@ func DefaultMultiplierConfig() MultiplierConfig {
 	}
 }
 
-func (c *Calcualator) Estimate(ctx context.Context, req domain.CalcualtionRequest) (domain.CalculationResult, error) {
+func (c *Calculator) Estimate(ctx context.Context, req domain.CalculationRequest) (domain.CalculationResult, error) {
 	if err := ctx.Err(); err != nil {
 		return domain.CalculationResult{}, err
 	}
@@ -87,7 +86,7 @@ func (c *Calcualator) Estimate(ctx context.Context, req domain.CalcualtionReques
 	}
 	if req.Material == nil {
 		if c.materials == nil {
-			return domain.CalculationResult{}, errors.New("material catalog is not configured")
+			return domain.CalculationResult{}, errors.New("material repository is not configured")
 		}
 
 		material, err := c.materials.GetByType(ctx, req.MaterialCode)
@@ -116,7 +115,7 @@ func (c *Calcualator) Estimate(ctx context.Context, req domain.CalcualtionReques
 		StoneTonnage:                stone.StoneTonnage,
 		WasteStoneKg:                stone.WasteStoneKg,
 		AppliedComplexityMultiplier: multipliers.ComplexityMultiplier,
-		BreakDown: map[string]float64{
+		Breakdown: map[string]float64{
 			"totalWallAreaM2":      surface.TotalWallAreaM2,
 			"voidAreaM2":           surface.VoidAreaM2,
 			"netWallAreaM2":        surface.NetAreaM2,
@@ -137,7 +136,7 @@ func (c *Calcualator) Estimate(ctx context.Context, req domain.CalcualtionReques
 	return result, nil
 }
 
-func (c *Calcualator) ApplyMultipliers(req domain.CalcualtionRequest) AppliedMultipliers {
+func (c *Calculator) ApplyMultipliers(req domain.CalculationRequest) AppliedMultipliers {
 	config := c.multipliers
 	if config.DefaultComplexityMultiplier == 0 {
 		config.DefaultComplexityMultiplier = 1
@@ -173,7 +172,7 @@ func (c *Calcualator) ApplyMultipliers(req domain.CalcualtionRequest) AppliedMul
 	}
 }
 
-func CalculateSurfaceArea(wall domain.WallDimenstions, voids []domain.Void) (SurfaceAreaCalculation, error) {
+func CalculateSurfaceArea(wall domain.WallDimensions, voids []domain.Void) (SurfaceAreaCalculation, error) {
 	totalWallArea := wall.SurfaceArea()
 	if totalWallArea <= 0 {
 		return SurfaceAreaCalculation{}, fmt.Errorf("total wall area must be > 0, got %f", totalWallArea)

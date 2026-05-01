@@ -3,9 +3,9 @@ package domain
 import "testing"
 
 func TestCalculationRequestValidate(t *testing.T) {
-	req := CalcualtionRequest{
+	req := CalculationRequest{
 		MaterialCode: "GRAN-01",
-		Wall: WallDimenstions{
+		Wall: WallDimensions{
 			LengthM:    5.0,
 			HeightM:    2.5,
 			ThicknessM: 0.25,
@@ -24,44 +24,44 @@ func TestCalculationRequestValidate(t *testing.T) {
 func TestCalculatonRequestValidate_Invalid(t *testing.T) {
 	cases := []struct {
 		name    string
-		req     CalcualtionRequest
+		req     CalculationRequest
 		wantErr bool
 	}{
-		{"missing material", CalcualtionRequest{
-			Wall: WallDimenstions{
+		{"missing material", CalculationRequest{
+			Wall: WallDimensions{
 				LengthM:    1,
 				HeightM:    1,
 				ThicknessM: 0.2},
 			ComplexityMultiplier: 1.0,
 		}, true},
-		{"zero length", CalcualtionRequest{
+		{"zero length", CalculationRequest{
 			MaterialCode: "X",
-			Wall: WallDimenstions{
+			Wall: WallDimensions{
 				LengthM:    0,
 				HeightM:    1,
 				ThicknessM: 0.2},
 			ComplexityMultiplier: 1.0,
 		}, true},
-		{"negative waste", CalcualtionRequest{
+		{"negative waste", CalculationRequest{
 			MaterialCode: "X",
-			Wall: WallDimenstions{
+			Wall: WallDimensions{
 				LengthM:    1,
 				HeightM:    1,
 				ThicknessM: 0.2},
 			WastePercent:         -0.1,
 			ComplexityMultiplier: 1.0,
 		}, true},
-		{"complexity < 1", CalcualtionRequest{
+		{"complexity < 1", CalculationRequest{
 			MaterialCode: "X",
-			Wall: WallDimenstions{
+			Wall: WallDimensions{
 				LengthM:    1,
 				HeightM:    1,
 				ThicknessM: 0.2},
 			ComplexityMultiplier: 0.5,
 		}, true},
-		{"void too large", CalcualtionRequest{
+		{"void too large", CalculationRequest{
 			MaterialCode: "X",
-			Wall: WallDimenstions{
+			Wall: WallDimensions{
 				LengthM:    2,
 				HeightM:    2,
 				ThicknessM: 0.2},
