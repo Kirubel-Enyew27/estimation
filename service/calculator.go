@@ -96,7 +96,7 @@ func (c *Calculator) Estimate(ctx context.Context, req domain.CalculationRequest
 		req.Material = material
 	}
 
-	surface, err := CalculateSurfaceArea(req.Wall, req.Voids)
+	surface, err := calculateSurfaceArea(req.Wall, req.Voids, false)
 	if err != nil {
 		return domain.CalculationResult{}, err
 	}
@@ -110,7 +110,7 @@ func (c *Calculator) Estimate(ctx context.Context, req domain.CalculationRequest
 
 	result := domain.CalculationResult{
 		SurfaceAreaM2:               surface.NetAreaM2,
-		VolumeM3:                    surface.NetAreaM2 * req.Wall.ThicknessM,
+		VolumeM3:                    stone.VolumeM3,
 		StoneMassKg:                 stone.StoneMassKg,
 		StoneTonnage:                stone.StoneTonnage,
 		WasteStoneKg:                stone.WasteStoneKg,
@@ -144,14 +144,15 @@ func (c *Calculator) ApplyMultipliers(req domain.CalculationRequest) AppliedMult
 
 	wastePercent := config.DefaultWastePercent
 	if req.Material != nil {
-		for _, key := range []string{req.Material.Type, req.Material.Code, req.Material.Name} {
-			if configuredWaste, ok := config.MaterialWastePercent[normalizeMultiplierKey(key)]; ok {
-				wastePercent = configuredWaste
-				break
-			}
+		if configuredWaste, ok := lookupMultiplier(config.MaterialWastePercent, req.Material.Type); ok {
+			wastePercent = configuredWaste
+		} else if configuredWaste, ok := lookupMultiplier(config.MaterialWastePercent, req.Material.Code); ok {
+			wastePercent = configuredWaste
+		} else if configuredWaste, ok := lookupMultiplier(config.MaterialWastePercent, req.Material.Name); ok {
+			wastePercent = configuredWaste
 		}
 	}
-	if configuredWaste, ok := config.MaterialWastePercent[normalizeMultiplierKey(req.MaterialCode)]; ok {
+	if configuredWaste, ok := lookupMultiplier(config.MaterialWastePercent, req.MaterialCode); ok {
 		wastePercent = configuredWaste
 	}
 	if req.WastePercent > 0 {
@@ -159,7 +160,7 @@ func (c *Calculator) ApplyMultipliers(req domain.CalculationRequest) AppliedMult
 	}
 
 	complexityMultiplier := config.DefaultComplexityMultiplier
-	if configuredComplexity, ok := config.PatternComplexityMultipliers[normalizeMultiplierKey(req.Pattern)]; ok {
+	if configuredComplexity, ok := lookupMultiplier(config.PatternComplexityMultipliers, req.Pattern); ok {
 		complexityMultiplier = configuredComplexity
 	}
 	if req.ComplexityMultiplier > 0 {
@@ -173,17 +174,23 @@ func (c *Calculator) ApplyMultipliers(req domain.CalculationRequest) AppliedMult
 }
 
 func CalculateSurfaceArea(wall domain.WallDimensions, voids []domain.Void) (SurfaceAreaCalculation, error) {
+	return calculateSurfaceArea(wall, voids, true)
+}
+
+func calculateSurfaceArea(wall domain.WallDimensions, voids []domain.Void, validateVoids bool) (SurfaceAreaCalculation, error) {
 	totalWallArea := wall.SurfaceArea()
 	if totalWallArea <= 0 {
 		return SurfaceAreaCalculation{}, fmt.Errorf("total wall area must be > 0, got %f", totalWallArea)
 	}
 
 	var voidArea float64
-	for i, void := range voids {
-		if void.WidthM < 0 || void.HeightM < 0 {
+	for i := range voids {
+		width := voids[i].WidthM
+		height := voids[i].HeightM
+		if validateVoids && (width < 0 || height < 0) {
 			return SurfaceAreaCalculation{}, fmt.Errorf("void[%d] dimensions can not be negative", i)
 		}
-		voidArea += void.Area()
+		voidArea += width * height
 	}
 
 	if voidArea > totalWallArea {
@@ -268,6 +275,10 @@ func normalizeMultiplierConfig(config MultiplierConfig) MultiplierConfig {
 }
 
 func normalizeFloatMapKeys(values map[string]float64) map[string]float64 {
+	if len(values) == 0 {
+		return values
+	}
+
 	normalized := make(map[string]float64, len(values))
 	for key, value := range values {
 		normalized[normalizeMultiplierKey(key)] = value
@@ -275,6 +286,27 @@ func normalizeFloatMapKeys(values map[string]float64) map[string]float64 {
 	return normalized
 }
 
+func lookupMultiplier(values map[string]float64, key string) (float64, bool) {
+	if len(values) == 0 {
+		return 0, false
+	}
+
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return 0, false
+	}
+
+	value, ok := values[normalizeTrimmedMultiplierKey(key)]
+	return value, ok
+}
+
 func normalizeMultiplierKey(value string) string {
-	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(value), " ", "-"))
+	return normalizeTrimmedMultiplierKey(strings.TrimSpace(value))
+}
+
+func normalizeTrimmedMultiplierKey(value string) string {
+	if strings.Contains(value, " ") {
+		value = strings.ReplaceAll(value, " ", "-")
+	}
+	return strings.ToLower(value)
 }

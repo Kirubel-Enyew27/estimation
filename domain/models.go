@@ -85,11 +85,13 @@ func (r *CalculationRequest) Validate() error {
 	}
 
 	grossArea := r.Wall.SurfaceArea()
-	for i, v := range r.Voids {
-		if v.WidthM < 0 || v.HeightM < 0 {
+	for i := range r.Voids {
+		width := r.Voids[i].WidthM
+		height := r.Voids[i].HeightM
+		if width < 0 || height < 0 {
 			return fmt.Errorf("void[%d] dimensions can not be negative", i)
 		}
-		if v.Area() > grossArea {
+		if width*height > grossArea {
 			return fmt.Errorf("void[%d] area exceeds gross wall area", i)
 		}
 	}
