@@ -268,6 +268,39 @@ func TestCalculatorEstimateAppliesConfiguredMultipliersToFinalMaterialEstimate(t
 	assertFloat(t, got.BreakDown["wastePercent"], 0.25)
 }
 
+func TestCalculatorEstimateLookUpMaterialByType(t *testing.T) {
+	catalog, err := store.NewMaterialCatalog([]domain.Material{
+		{
+			Type: "limestine",
+			DensityKgPerM3: 2300,
+			CostPerTon: 110,
+			CoverageRateM2PerRonne: 1.7,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewMaterialCatalog returned error: %v", err)
+	}
+
+	Calculator := NewCalculatorWithMaterialStore(catalog)
+	got, err := Calculator.Estimate(context.Background(), domain.CalcualtionRequest{
+		MaterialCode: "Limestone",
+		Wall: domain.WallDimenstions{
+			LengthM: 6,
+			HeightM: 2,
+			ThicknessM: 0.2,
+		},
+		ComplexityMultiplier: 1,
+	})
+	if err != nil {
+		t.Fatalf("Estimate returned error: %v", err)
+	}
+
+	assertFloat(t, got.SurfaceAreaM2, 12)
+	assertFloat(t, got.VolumeM3, 2.4)
+	assertFloat(t, got.StoneMassKg, 7058.823529411765)
+	assertFloat(t, got.StoneTonnage, 7.058823529411765)
+}
+
 func assertFloat(t *testing.T, got, want float64) {
 	t.Helper()
 	if math.Abs(got-want) > 1e-9 {

@@ -63,7 +63,6 @@ func NewMaterialCatalog(materials []domain.Material) (*MaterialCatalog, error) {
 		catalog.byType[key] = &copied
 		catalog.materials = append(catalog.materials, &copied)
 	}
-
 	return catalog, nil
 }
 
