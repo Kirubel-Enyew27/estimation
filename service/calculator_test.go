@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"estimation/domain"
+	"estimation/store"
 	"math"
 	"testing"
 )
@@ -188,6 +189,56 @@ func TestCalculatorEstimate(t *testing.T) {
 	assertFloat(t, got.MortarVolumeM3, 0.0039)
 	assertFloat(t, got.MortarMassKg, 8.424)
 
+}
+
+func TestCalculatorEstimateLookUpMaterialByType(t *testing.T) {
+	catalog, err := store.NewMaterialCatalog([]domain.Material{
+		{
+			Type: "limestine",
+			DensityKgPerM3: 2300,
+			CostPerTon: 110,
+			CoverageRateM2PerRonne: 1.7,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewMaterialCatalog returned error: %v", err)
+	}
+
+	Calculator := NewCalculatorWithMaterialStore(catalog)
+	got, err := Calculator.Estimate(context.Background(), domain.CalcualtionRequest{
+		MaterialCode: "Limestone",
+		Wall: domain.WallDimenstions{
+			LengthM: 6,
+			HeightM: 2,
+			ThicknessM: 0.2,
+		},
+		ComplexityMultiplier: 1,
+	})
+	if err != nil {
+		t.Fatalf("Estimate returned error: %v", err)
+	}
+
+	assertFloat(t, got.SurfaceAreaM2, 12)
+	assertFloat(t, got.VolumeM3, 2.4)
+	assertFloat(t, got.StoneMassKg, 7058.823529411765)
+	assertFloat(t, got.StoneTonnage, 7.058823529411765)
+}
+
+func TestCalculatorEstimateRequiresConfiguredCatalogForMaterialCode(t *testing.T) {
+	Calcualator := NewCalculator()
+
+	_, err := Calcualator.Estimate(context.Background(), domain.CalcualtionRequest{
+		MaterialCode: "brick",
+		Wall: domain.WallDimenstions{
+			LengthM: 1,
+			HeightM: 1,
+			ThicknessM: 0.2,
+		},
+		ComplexityMultiplier: 1,
+	})
+	if err == nil {
+		t.Fatal("expected error when material catalog is not configured")
+	}
 }
 
 func assertFloat(t *testing.T, got, want float64) {
