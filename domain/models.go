@@ -9,8 +9,8 @@ type Material struct {
 	ID                     string  `json:"id,omitempty"`
 	Code                   string  `json:"code"`
 	Name                   string  `json:"name"`
-	Type                   string  `json:"type,omitempty"`
 	DensityKgPerM3         float64 `json:"densityKgPerM3"`
+	Type                   string  `json:"type,omitempty"`
 	CoverageRateM2PerRonne float64 `json:"coverageRateM2PerRonne,omitempty"`
 	Comment                string  `json:"comment,omitempty"`
 }

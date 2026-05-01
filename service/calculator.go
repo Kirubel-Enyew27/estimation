@@ -25,7 +25,6 @@ type AppliedMultipliers struct {
 	WastePercent         float64
 	ComplexityMultiplier float64
 }
-
 type SurfaceAreaCalculation struct {
 	TotalWallAreaM2 float64
 	VoidAreaM2      float64
