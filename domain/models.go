@@ -9,9 +9,10 @@ type Material struct {
 	ID                     string  `json:"id,omitempty"`
 	Code                   string  `json:"code"`
 	Name                   string  `json:"name"`
-	DensityKgPerM3         float64 `json:"densityKgPerM3"`
+	DensityKgPerM3         float64 `json:"density"`
+	CostPerTon             float64 `json:"cost_per_ton"`
 	Type                   string  `json:"type,omitempty"`
-	CoverageRateM2PerRonne float64 `json:"coverageRateM2PerRonne,omitempty"`
+	CoverageRateM2PerRonne float64 `json:"coverage_rate,omitempty"`
 	Comment                string  `json:"comment,omitempty"`
 }
 

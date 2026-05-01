@@ -1,0 +1,20 @@
+[
+  {
+    "type": "brick",
+    "density": 1800,
+    "cost_per_ton": 65,
+    "coverage_rate": 2.2
+  },
+  {
+    "type": "fieldstone",
+    "density": 2400,
+    "cost_per_ton": 95,
+    "coverage_rate": 1.5
+  },
+  {
+    "type": "limestone",
+    "density": 2300,
+    "cost_per_ton": 110,
+    "coverage_rate": 1.7
+  }
+]

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"estimation/domain"
+	"estimation/store"
 	"fmt"
 	"strings"
 )
@@ -12,6 +13,7 @@ const MortarDensityKgPerM3 = 2160
 
 type Calcualator struct {
 	multipliers MultiplierConfig
+	materials   store.MaterialStore
 }
 
 type MultiplierConfig struct {
@@ -47,6 +49,18 @@ func NewCalculatorWithConfig(config MultiplierConfig) *Calcualator {
 	return &Calcualator{multipliers: config}
 }
 
+func NewCalculatorWithMaterialStore(materials store.MaterialStore) *Calcualator {
+	return NewCalculatorWithConfigAndMaterialStore(DefaultMultiplierConfig(), materials)
+}
+
+func NewCalculatorWithConfigAndMaterialStore(config MultiplierConfig, materials store.MaterialStore) *Calcualator {
+	config = normalizeMultiplierConfig(config)
+	return &Calcualator{
+		multipliers: config,
+		materials:   materials,
+	}
+}
+
 func DefaultMultiplierConfig() MultiplierConfig {
 	return MultiplierConfig{
 		MaterialWastePercent: map[string]float64{
@@ -72,7 +86,15 @@ func (c *Calcualator) Estimate(ctx context.Context, req domain.CalcualtionReques
 		return domain.CalculationResult{}, err
 	}
 	if req.Material == nil {
-		return domain.CalculationResult{}, errors.New("material lookup is not implemented for materialCode-only requests")
+		if c.materials == nil {
+			return domain.CalculationResult{}, errors.New("material catalog is not configured")
+		}
+
+		material, err := c.materials.GetByType(ctx, req.MaterialCode)
+		if err != nil {
+			return domain.CalculationResult{}, fmt.Errorf("lookup material type %q: %w", req.MaterialCode, err)
+		}
+		req.Material = material
 	}
 
 	surface, err := CalculateSurfaceArea(req.Wall, req.Voids)

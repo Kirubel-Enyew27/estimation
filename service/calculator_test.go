@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"estimation/domain"
+	"estimation/store"
 	"math"
 	"testing"
 )
@@ -74,7 +75,7 @@ func TestApplyMultipliersCanBeConfigured(t *testing.T) {
 		PatternComplexityMultipliers: map[string]float64{
 			"coursed random": 1.35,
 		},
-		DefaultWastePercent: 0.05,
+		DefaultWastePercent:         0.05,
 		DefaultComplexityMultiplier: 1.05,
 	})
 
@@ -96,8 +97,8 @@ func TestApplyMultipliersLetsExplicitRequestValuesOverrideConfig(t *testing.T) {
 		Material: &domain.Material{
 			Type: "Fieldstone",
 		},
-		Pattern: "Herringbone",
-		WastePercent: 0.08,
+		Pattern:              "Herringbone",
+		WastePercent:         0.08,
 		ComplexityMultiplier: 1.05,
 	})
 
@@ -133,12 +134,12 @@ func TestCalculatorEstimateAppliesConfiguredMultipliersToFinalMaterialsEstimate(
 
 	got, err := Calcualator.Estimate(context.Background(), domain.CalcualtionRequest{
 		Material: &domain.Material{
-			Type: "Fieldstone",
+			Type:           "Fieldstone",
 			DensityKgPerM3: 2000,
 		},
 		Wall: domain.WallDimenstions{
-			LengthM: 5,
-			HeightM: 2,
+			LengthM:    5,
+			HeightM:    2,
 			ThicknessM: 0.2,
 		},
 		Pattern: "Herringbone",
@@ -187,6 +188,56 @@ func TestCalculatorEstimate(t *testing.T) {
 	assertFloat(t, got.StoneTonnage, 6.5)
 	assertFloat(t, got.MortarVolumeM3, 0.0039)
 	assertFloat(t, got.MortarMassKg, 8.424)
+}
+
+func TestCalculatorEstimateLooksUpMaterialByType(t *testing.T) {
+	catalog, err := store.NewMaterialCatalog([]domain.Material{
+		{
+			Type:                   "limestone",
+			DensityKgPerM3:         2300,
+			CostPerTon:             110,
+			CoverageRateM2PerRonne: 1.7,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewMaterialCatalog returned error: %v", err)
+	}
+
+	calculator := NewCalculatorWithMaterialStore(catalog)
+	got, err := calculator.Estimate(context.Background(), domain.CalcualtionRequest{
+		MaterialCode: "Limestone",
+		Wall: domain.WallDimenstions{
+			LengthM:    6,
+			HeightM:    2,
+			ThicknessM: 0.2,
+		},
+		ComplexityMultiplier: 1,
+	})
+	if err != nil {
+		t.Fatalf("Estimate returned error: %v", err)
+	}
+
+	assertFloat(t, got.SurfaceAreaM2, 12)
+	assertFloat(t, got.VolumeM3, 2.4)
+	assertFloat(t, got.StoneMassKg, 7058.823529411765)
+	assertFloat(t, got.StoneTonnage, 7.058823529411765)
+}
+
+func TestCalculatorEstimateRequiresConfiguredCatalogForMaterialCode(t *testing.T) {
+	calculator := NewCalculator()
+
+	_, err := calculator.Estimate(context.Background(), domain.CalcualtionRequest{
+		MaterialCode: "brick",
+		Wall: domain.WallDimenstions{
+			LengthM:    1,
+			HeightM:    1,
+			ThicknessM: 0.2,
+		},
+		ComplexityMultiplier: 1,
+	})
+	if err == nil {
+		t.Fatal("expected error when material catalog is not configured")
+	}
 }
 
 func TestCalculatorEstimateAppliesConfiguredMultipliersToFinalMaterialEstimate(t *testing.T) {
