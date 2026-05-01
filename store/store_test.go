@@ -23,8 +23,8 @@ func TestLoadMaterialCatalogLooksUpByMaterialType(t *testing.T) {
 		t.Fatalf("GetByType returned error: %v", err)
 	}
 
-	if material.Type != "Fieldstone" {
-		t.Fatalf("got type %q, want Fieldstone", material.Type)
+	if material.Type != "fieldstone" {
+		t.Fatalf("got type %q, want fieldstone", material.Type)
 	}
 	if material.DensityKgPerM3 != 2400 {
 		t.Fatalf("got cost per ton %f, want 2400", material.DensityKgPerM3)
@@ -76,7 +76,7 @@ func TestMaterialCatalogReturnsNotFoundForUnknownType(t *testing.T) {
 	catalog, err := NewMaterialCatalogFromJSON(t, `[
 		{"type":"brick","density":1800,"cost_per_ton":65,"coverage_rate":2.2}
 	]`)
-		if err != nil {
+	if err != nil {
 		t.Fatalf("NewMaterialCatalog returned error: %v", err)
 	}
 
@@ -86,7 +86,7 @@ func TestMaterialCatalogReturnsNotFoundForUnknownType(t *testing.T) {
 	}
 }
 
-func NewMaterialCatalogFromJSON(t *testing.T, content string)(*MaterialCatalog, error) {
+func NewMaterialCatalogFromJSON(t *testing.T, content string) (*MaterialCatalog, error) {
 	t.Helper()
 	return LoadMaterialCatalog(writeCatalog(t, content))
 }

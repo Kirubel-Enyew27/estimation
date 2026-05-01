@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"estimation/domain"
 	"estimation/store"
 	"math"
@@ -35,6 +36,66 @@ func TestCalculateSurfaceAreaRejectsTotalVoidsOverWallArea(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error when total void area exceeds wall area")
+	}
+}
+
+func TestCalculateSurfaceAreaRejectsZeroDimensions(t *testing.T) {
+	cases := []struct {
+		name string
+		wall domain.WallDimenstions
+	}{
+		{
+			name: "zero length",
+			wall: domain.WallDimenstions{LengthM: 0, HeightM: 3},
+		},
+		{
+			name: "zero height",
+			wall: domain.WallDimenstions{LengthM: 3, HeightM: 0},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := CalculateSurfaceArea(tc.wall, nil)
+			if err == nil {
+				t.Fatal("expected error for zero wall dimension")
+			}
+		})
+	}
+}
+
+func TestCalculateSurfaceAreaRejectsInvalidVoidSizes(t *testing.T) {
+	cases := []struct {
+		name  string
+		voids []domain.Void
+	}{
+		{
+			name:  "negative width",
+			voids: []domain.Void{{WidthM: -1, HeightM: 1}},
+		},
+		{
+			name:  "negative height",
+			voids: []domain.Void{{WidthM: 1, HeightM: -1}},
+		},
+		{
+			name: "combined void area exceeds wall",
+			voids: []domain.Void{
+				{WidthM: 2, HeightM: 2},
+				{WidthM: 1, HeightM: 1},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := CalculateSurfaceArea(domain.WallDimenstions{
+				LengthM: 2,
+				HeightM: 2,
+			}, tc.voids)
+			if err == nil {
+				t.Fatal("expected error for invalid void sizes")
+			}
+		})
 	}
 }
 
@@ -75,7 +136,7 @@ func TestApplyMultipliersCanBeConfigured(t *testing.T) {
 		PatternComplexityMultipliers: map[string]float64{
 			"coursed random": 1.35,
 		},
-		DefaultWastePercent: 0.05,
+		DefaultWastePercent:         0.05,
 		DefaultComplexityMultiplier: 1.05,
 	})
 
@@ -97,13 +158,55 @@ func TestApplyMultipliersLetsExplicitRequestValuesOverrideConfig(t *testing.T) {
 		Material: &domain.Material{
 			Type: "Fieldstone",
 		},
-		Pattern: "Herringbone",
-		WastePercent: 0.08,
+		Pattern:              "Herringbone",
+		WastePercent:         0.08,
 		ComplexityMultiplier: 1.05,
 	})
 
 	assertFloat(t, got.WastePercent, 0.08)
 	assertFloat(t, got.ComplexityMultiplier, 1.05)
+}
+
+func TestApplyMultipliersUsesDefaultsForUnknownMaterialAndPattern(t *testing.T) {
+	calculator := NewCalculatorWithConfig(MultiplierConfig{
+		MaterialWastePercent: map[string]float64{
+			"brick": 0.10,
+		},
+		PatternComplexityMultipliers: map[string]float64{
+			"herringbone": 1.20,
+		},
+		DefaultWastePercent:         0.03,
+		DefaultComplexityMultiplier: 1.05,
+	})
+
+	got := calculator.ApplyMultipliers(domain.CalcualtionRequest{
+		Material: &domain.Material{
+			Type: "granite",
+		},
+		Pattern: "unknown-pattern",
+	})
+
+	assertFloat(t, got.WastePercent, 0.03)
+	assertFloat(t, got.ComplexityMultiplier, 1.05)
+}
+
+func TestApplyMultipliersUsesMaterialCodeWhenInlineMaterialDoesNotMatch(t *testing.T) {
+	calculator := NewCalculatorWithConfig(MultiplierConfig{
+		MaterialWastePercent: map[string]float64{
+			"brick": 0.10,
+		},
+		DefaultComplexityMultiplier: 1,
+	})
+
+	got := calculator.ApplyMultipliers(domain.CalcualtionRequest{
+		MaterialCode: "brick",
+		Material: &domain.Material{
+			Type: "unknown",
+		},
+	})
+
+	assertFloat(t, got.WastePercent, 0.10)
+	assertFloat(t, got.ComplexityMultiplier, 1)
 }
 
 func TestCalculateStoneTonnageFallsBackToDensityWhenCoverageIsUnset(t *testing.T) {
@@ -129,17 +232,49 @@ func TestCalculateMortarUsesJointWidthAndDepth(t *testing.T) {
 	assertFloat(t, mass, 12.96)
 }
 
+func TestCalculateMortarHandlesZeroJointDimensions(t *testing.T) {
+	volume, mass, err := CalculateMortar(25, 0, 0.02)
+	if err != nil {
+		t.Fatalf("CalculateMortar returned error: %v", err)
+	}
+
+	assertFloat(t, volume, 0)
+	assertFloat(t, mass, 0)
+}
+
+func TestCalculateMortarRejectsInvalidInputs(t *testing.T) {
+	cases := []struct {
+		name       string
+		netAreaM2  float64
+		jointWidth float64
+		jointDepth float64
+	}{
+		{name: "negative area", netAreaM2: -1, jointWidth: 0.01, jointDepth: 0.02},
+		{name: "negative width", netAreaM2: 10, jointWidth: -0.01, jointDepth: 0.02},
+		{name: "negative depth", netAreaM2: 10, jointWidth: 0.01, jointDepth: -0.02},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := CalculateMortar(tc.netAreaM2, tc.jointWidth, tc.jointDepth)
+			if err == nil {
+				t.Fatal("expected error for invalid mortar inputs")
+			}
+		})
+	}
+}
+
 func TestCalculatorEstimateAppliesConfiguredMultipliersToFinalMaterialsEstimate(t *testing.T) {
 	Calcualator := NewCalculator()
 
 	got, err := Calcualator.Estimate(context.Background(), domain.CalcualtionRequest{
 		Material: &domain.Material{
-			Type: "Fieldstone",
+			Type:           "Fieldstone",
 			DensityKgPerM3: 2000,
 		},
 		Wall: domain.WallDimenstions{
-			LengthM: 5,
-			HeightM: 2,
+			LengthM:    5,
+			HeightM:    2,
 			ThicknessM: 0.2,
 		},
 		Pattern: "Herringbone",
@@ -194,9 +329,9 @@ func TestCalculatorEstimate(t *testing.T) {
 func TestCalculatorEstimateLookUpMaterialByType(t *testing.T) {
 	catalog, err := store.NewMaterialCatalog([]domain.Material{
 		{
-			Type: "limestine",
-			DensityKgPerM3: 2300,
-			CostPerTon: 110,
+			Type:                   "limestone",
+			DensityKgPerM3:         2300,
+			CostPerTon:             110,
 			CoverageRateM2PerRonne: 1.7,
 		},
 	})
@@ -208,8 +343,8 @@ func TestCalculatorEstimateLookUpMaterialByType(t *testing.T) {
 	got, err := Calculator.Estimate(context.Background(), domain.CalcualtionRequest{
 		MaterialCode: "Limestone",
 		Wall: domain.WallDimenstions{
-			LengthM: 6,
-			HeightM: 2,
+			LengthM:    6,
+			HeightM:    2,
 			ThicknessM: 0.2,
 		},
 		ComplexityMultiplier: 1,
@@ -230,14 +365,42 @@ func TestCalculatorEstimateRequiresConfiguredCatalogForMaterialCode(t *testing.T
 	_, err := Calcualator.Estimate(context.Background(), domain.CalcualtionRequest{
 		MaterialCode: "brick",
 		Wall: domain.WallDimenstions{
-			LengthM: 1,
-			HeightM: 1,
+			LengthM:    1,
+			HeightM:    1,
 			ThicknessM: 0.2,
 		},
 		ComplexityMultiplier: 1,
 	})
 	if err == nil {
 		t.Fatal("expected error when material catalog is not configured")
+	}
+}
+
+func TestCalculatorEstimateReturnsNotFoundForUnknownMaterial(t *testing.T) {
+	catalog, err := store.NewMaterialCatalog([]domain.Material{
+		{
+			Type:                   "brick",
+			DensityKgPerM3:         1800,
+			CostPerTon:             65,
+			CoverageRateM2PerRonne: 2.2,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewMaterialCatalog returned error: %v", err)
+	}
+
+	calculator := NewCalculatorWithMaterialStore(catalog)
+	_, err = calculator.Estimate(context.Background(), domain.CalcualtionRequest{
+		MaterialCode: "granite",
+		Wall: domain.WallDimenstions{
+			LengthM:    1,
+			HeightM:    1,
+			ThicknessM: 0.2,
+		},
+		ComplexityMultiplier: 1,
+	})
+	if !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("got error %v, want ErrNotFound", err)
 	}
 }
 

@@ -146,7 +146,7 @@ func (c *Calcualator) ApplyMultipliers(req domain.CalcualtionRequest) AppliedMul
 	wastePercent := config.DefaultWastePercent
 	if req.Material != nil {
 		for _, key := range []string{req.Material.Type, req.Material.Code, req.Material.Name} {
-			if configuredWaste, ok := config.MaterialWastePercent[key]; ok {
+			if configuredWaste, ok := config.MaterialWastePercent[normalizeMultiplierKey(key)]; ok {
 				wastePercent = configuredWaste
 				break
 			}
