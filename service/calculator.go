@@ -92,7 +92,7 @@ func (c *Calcualator) Estimate(ctx context.Context, req domain.CalcualtionReques
 
 		material, err := c.materials.GetByType(ctx, req.MaterialCode)
 		if err != nil {
-			return domain.CalculationResult{}, fmt.Errorf("lookup material type %q: %w", req.MaterialCode, &err)
+			return domain.CalculationResult{}, fmt.Errorf("lookup material type %q: %w", req.MaterialCode, err)
 		}
 		req.Material = material
 	}

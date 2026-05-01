@@ -96,7 +96,7 @@ func writeCatalog(t *testing.T, content string) string {
 
 	path := filepath.Join(t.TempDir(), "materials.json")
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatalf("write catalog: %w", err)
+		t.Fatalf("write catalog: %v", err)
 	}
 	return path
 }
