@@ -52,6 +52,17 @@ func (r *CalcualtionRequest) Validate() error {
 	if r.Material == nil && r.MaterialCode == "" {
 		return errors.New("material must be provided either by code or inline")
 	}
+	if r.Material != nil {
+		if r.Material.DensityKgPerM3 <= 0 {
+			return fmt.Errorf("material.density must be > 0, got %f", r.Material.DensityKgPerM3)
+		}
+		if r.Material.CostPerTon < 0 {
+			return fmt.Errorf("material.coverage_rate must be >= 0, got %f", r.Material.CostPerTon)
+		}
+		if r.Material.CoverageRateM2PerRonne < 0 {
+			return fmt.Errorf("material.coverage_rate musst be >= 0, got %f", r.Material.CoverageRateM2PerRonne)
+		}
+	}
 	if r.Wall.LengthM <= 0 {
 		return fmt.Errorf("wall.lengthM must be > 0, got %f", r.Wall.LengthM)
 	}
