@@ -25,8 +25,9 @@ func main() {
 		log.Fatalf("failed to load material catalog: %v", err)
 	}
 
-	calculator := service.NewCalculatorWithMaterialStore(catalog)
-	api := handler.New(calculator, catalog)
+	calculator := service.NewCalculatorWithMaterialRepository(catalog)
+	materialService := service.NewMaterialCatalogService(catalog)
+	api := handler.New(calculator, materialService)
 	materials, err := catalog.List(context.Background())
 	if err != nil {
 		log.Fatalf("failed to inspect material catalog: %v", err)

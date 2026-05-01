@@ -5,19 +5,21 @@ import (
 	"errors"
 	"estimation/domain"
 	"estimation/service"
-	"estimation/store"
 	"fmt"
 	"io"
 	"net/http"
 )
 
 type Handler struct {
-	Service service.EstimationService
-	Store   store.MaterialStore
+	estimator service.EstimationService
+	materials service.MaterialService
 }
 
-func New(svc service.EstimationService, st store.MaterialStore) *Handler {
-	return &Handler{Service: svc, Store: st}
+func New(estimator service.EstimationService, materials service.MaterialService) *Handler {
+	return &Handler{
+		estimator: estimator,
+		materials: materials,
+	}
 }
 
 func (h *Handler) Routes() http.Handler {
@@ -32,7 +34,7 @@ func (h *Handler) CalculateProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "POST method required")
 		return
 	}
-	if h.Service == nil {
+	if h.estimator == nil {
 		writeError(w, http.StatusInternalServerError, "estimation service is not configured")
 		return
 	}
@@ -47,16 +49,15 @@ func (h *Handler) CalculateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.Service.Estimate(r.Context(), req.CalcualtionRequest)
+	result, err := h.estimator.Estimate(r.Context(), req.CalculationRequest)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.Is(err, service.ErrMaterialNotFound) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		writeError(w, http.StatusInternalServerError, "failed to calculate project estimate")
 		return
 	}
-
 	writeJSON(w, http.StatusOK, result)
 }
 
@@ -65,26 +66,25 @@ func (h *Handler) ListMaterials(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "GET method required")
 		return
 	}
-	if h.Store == nil {
-		writeError(w, http.StatusInternalServerError, "material store is not configured")
+	if h.materials == nil {
+		writeError(w, http.StatusInternalServerError, "material service is not configured")
 		return
 	}
 
-	materials, err := h.Store.List(r.Context())
+	materials, err := h.materials.ListMaterials(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list materials")
 		return
 	}
-
 	writeJSON(w, http.StatusOK, materials)
 }
 
 type calculateProjectRequest struct {
-	domain.CalcualtionRequest
+	domain.CalculationRequest
 }
 
 func (r calculateProjectRequest) Validate() error {
-	return r.CalcualtionRequest.Validate()
+	return r.CalculationRequest.Validate()
 }
 
 type errorResponse struct {

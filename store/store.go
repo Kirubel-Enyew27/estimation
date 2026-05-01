@@ -10,17 +10,9 @@ import (
 	"strings"
 )
 
-var ErrNotFound = errors.New("not found")
-
 type MaterialCatalog struct {
 	byType    map[string]*domain.Material
-	materials []*domain.Material
-}
-
-type MaterialStore interface {
-	GetByCode(ctx context.Context, code string) (*domain.Material, error)
-	GetByType(ctx context.Context, materialType string) (*domain.Material, error)
-	List(ctx context.Context) ([]*domain.Material, error)
+	materials []domain.Material
 }
 
 func LoadMaterialCatalog(path string) (*MaterialCatalog, error) {
@@ -45,7 +37,7 @@ func NewMaterialCatalog(materials []domain.Material) (*MaterialCatalog, error) {
 
 	catalog := &MaterialCatalog{
 		byType:    make(map[string]*domain.Material, len(materials)),
-		materials: make([]*domain.Material, 0, len(materials)),
+		materials: make([]domain.Material, 0, len(materials)),
 	}
 
 	for i := range materials {
@@ -61,13 +53,9 @@ func NewMaterialCatalog(materials []domain.Material) (*MaterialCatalog, error) {
 
 		copied := material
 		catalog.byType[key] = &copied
-		catalog.materials = append(catalog.materials, &copied)
+		catalog.materials = append(catalog.materials, copied)
 	}
 	return catalog, nil
-}
-
-func (c *MaterialCatalog) GetByCode(ctx context.Context, code string) (*domain.Material, error) {
-	return c.GetByType(ctx, code)
 }
 
 func (c *MaterialCatalog) GetByType(ctx context.Context, materialType string) (*domain.Material, error) {
@@ -85,14 +73,14 @@ func (c *MaterialCatalog) GetByType(ctx context.Context, materialType string) (*
 
 	material, ok := c.byType[key]
 	if !ok {
-		return nil, fmt.Errorf("%w: material type %q", ErrNotFound, materialType)
+		return nil, fmt.Errorf("%w: material type %q", domain.ErrMaterialNotFound, materialType)
 	}
 
 	copied := *material
 	return &copied, nil
 }
 
-func (c *MaterialCatalog) List(ctx context.Context) ([]*domain.Material, error) {
+func (c *MaterialCatalog) List(ctx context.Context) ([]domain.Material, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -100,11 +88,8 @@ func (c *MaterialCatalog) List(ctx context.Context) ([]*domain.Material, error) 
 		return nil, errors.New("material catalog is nil")
 	}
 
-	materials := make([]*domain.Material, 0, len(c.materials))
-	for _, material := range c.materials {
-		copied := *material
-		materials = append(materials, &copied)
-	}
+	materials := make([]domain.Material, len(c.materials))
+	copy(materials, c.materials)
 	return materials, nil
 }
 

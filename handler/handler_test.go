@@ -7,7 +7,6 @@ import (
 	"errors"
 	"estimation/domain"
 	"estimation/service"
-	"estimation/store"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -91,7 +90,10 @@ func TestCalculateProjectRejectsInvalidInput(t *testing.T) {
 }
 
 func TestCalculateProjectReturnsBadRequestForUnknownMaterial(t *testing.T) {
-	api := newTestHandler(t)
+	api := New(
+		stubEstimator{err: service.ErrMaterialNotFound},
+		stubMaterialService{materials: testMaterials()},
+	)
 	body := `{
 		"materialCode":"granite",
 		"wall":{"lengthM":5,"heightM":2,"thicknessM":0.2}
@@ -107,8 +109,7 @@ func TestCalculateProjectReturnsBadRequestForUnknownMaterial(t *testing.T) {
 }
 
 func TestCalculateProjectReturnsInternalServerErrorForServiceFailure(t *testing.T) {
-	catalog := newTestCatalog(t)
-	api := New(failingService{}, catalog)
+	api := New(failingService{}, stubMaterialService{materials: testMaterials()})
 	body := `{
 		"materialCode":"brick",
 		"wall":{"lengthM":5,"heightM":2,"thicknessM":0.2}
@@ -125,33 +126,58 @@ func TestCalculateProjectReturnsInternalServerErrorForServiceFailure(t *testing.
 
 type failingService struct{}
 
-func (failingService) Estimate(context.Context, domain.CalcualtionRequest) (domain.CalculationResult, error) {
+func (failingService) Estimate(context.Context, domain.CalculationRequest) (domain.CalculationResult, error) {
 	return domain.CalculationResult{}, errors.New("database unavailable")
 }
 
 func newTestHandler(t *testing.T) *Handler {
 	t.Helper()
 
-	catalog := newTestCatalog(t)
-	calculator := service.NewCalculatorWithMaterialStore(catalog)
-	return New(calculator, catalog)
+	return New(
+		stubEstimator{
+			result: domain.CalculationResult{
+				SurfaceAreaM2: 10,
+				VolumeM3:      2,
+				StoneTonnage:  4.4,
+			},
+		},
+		stubMaterialService{materials: testMaterials()},
+	)
 }
 
-func newTestCatalog(t *testing.T) *store.MaterialCatalog {
-	t.Helper()
+type stubEstimator struct {
+	result domain.CalculationResult
+	err    error
+}
 
-	catalog, err := store.NewMaterialCatalog([]domain.Material{
+func (s stubEstimator) Estimate(context.Context, domain.CalculationRequest) (domain.CalculationResult, error) {
+	if s.err != nil {
+		return domain.CalculationResult{}, s.err
+	}
+	return s.result, nil
+}
+
+type stubMaterialService struct {
+	materials []domain.Material
+	err       error
+}
+
+func (s stubMaterialService) ListMaterials(context.Context) ([]domain.Material, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	return s.materials, nil
+}
+
+func testMaterials() []domain.Material {
+	return []domain.Material{
 		{
 			Type:                   "brick",
 			DensityKgPerM3:         1800,
 			CostPerTon:             65,
 			CoverageRateM2PerRonne: 2.5,
 		},
-	})
-	if err != nil {
-		t.Fatalf("NewMaterialCatalog returned error: %v", err)
 	}
-	return catalog
 }
 
 func assertFloat(t *testing.T, got, want float64) {

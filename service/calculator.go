@@ -4,16 +4,15 @@ import (
 	"context"
 	"errors"
 	"estimation/domain"
-	"estimation/store"
 	"fmt"
 	"strings"
 )
 
 const MortarDensityKgPerM3 = 2160
 
-type Calcualator struct {
+type Calculator struct {
 	multipliers MultiplierConfig
-	materials   store.MaterialStore
+	materials   MaterialRepository
 }
 
 type MultiplierConfig struct {
@@ -40,22 +39,22 @@ type StoneCalculation struct {
 	WasteStoneKg float64
 }
 
-func NewCalculator() *Calcualator {
+func NewCalculator() *Calculator {
 	return NewCalculatorWithConfig(DefaultMultiplierConfig())
 }
 
-func NewCalculatorWithConfig(config MultiplierConfig) *Calcualator {
+func NewCalculatorWithConfig(config MultiplierConfig) *Calculator {
 	config = normalizeMultiplierConfig(config)
-	return &Calcualator{multipliers: config}
+	return &Calculator{multipliers: config}
 }
 
-func NewCalculatorWithMaterialStore(materials store.MaterialStore) *Calcualator {
-	return NewCalculatorWithConfigAndMaterialStore(DefaultMultiplierConfig(), materials)
+func NewCalculatorWithMaterialRepository(materials MaterialRepository) *Calculator {
+	return NewCalculatorWithConfigAndMaterialRepository(DefaultMultiplierConfig(), materials)
 }
 
-func NewCalculatorWithConfigAndMaterialStore(config MultiplierConfig, materials store.MaterialStore) *Calcualator {
+func NewCalculatorWithConfigAndMaterialRepository(config MultiplierConfig, materials MaterialRepository) *Calculator {
 	config = normalizeMultiplierConfig(config)
-	return &Calcualator{
+	return &Calculator{
 		multipliers: config,
 		materials:   materials,
 	}
@@ -78,7 +77,7 @@ func DefaultMultiplierConfig() MultiplierConfig {
 	}
 }
 
-func (c *Calcualator) Estimate(ctx context.Context, req domain.CalcualtionRequest) (domain.CalculationResult, error) {
+func (c *Calculator) Estimate(ctx context.Context, req domain.CalculationRequest) (domain.CalculationResult, error) {
 	if err := ctx.Err(); err != nil {
 		return domain.CalculationResult{}, err
 	}
@@ -87,17 +86,20 @@ func (c *Calcualator) Estimate(ctx context.Context, req domain.CalcualtionReques
 	}
 	if req.Material == nil {
 		if c.materials == nil {
-			return domain.CalculationResult{}, errors.New("material catalog is not configured")
+			return domain.CalculationResult{}, errors.New("material repository is not configured")
 		}
 
 		material, err := c.materials.GetByType(ctx, req.MaterialCode)
 		if err != nil {
+			if errors.Is(err, ErrMaterialNotFound) {
+				return domain.CalculationResult{}, fmt.Errorf("%w: material type %q does not exist", ErrMaterialNotFound, req.MaterialCode)
+			}
 			return domain.CalculationResult{}, fmt.Errorf("lookup material type %q: %w", req.MaterialCode, err)
 		}
 		req.Material = material
 	}
 
-	surface, err := CalculateSurfaceArea(req.Wall, req.Voids)
+	surface, err := calculateSurfaceArea(req.Wall, req.Voids, false)
 	if err != nil {
 		return domain.CalculationResult{}, err
 	}
@@ -111,12 +113,12 @@ func (c *Calcualator) Estimate(ctx context.Context, req domain.CalcualtionReques
 
 	result := domain.CalculationResult{
 		SurfaceAreaM2:               surface.NetAreaM2,
-		VolumeM3:                    surface.NetAreaM2 * req.Wall.ThicknessM,
+		VolumeM3:                    stone.VolumeM3,
 		StoneMassKg:                 stone.StoneMassKg,
 		StoneTonnage:                stone.StoneTonnage,
 		WasteStoneKg:                stone.WasteStoneKg,
 		AppliedComplexityMultiplier: multipliers.ComplexityMultiplier,
-		BreakDown: map[string]float64{
+		Breakdown: map[string]float64{
 			"totalWallAreaM2":      surface.TotalWallAreaM2,
 			"voidAreaM2":           surface.VoidAreaM2,
 			"netWallAreaM2":        surface.NetAreaM2,
@@ -137,7 +139,7 @@ func (c *Calcualator) Estimate(ctx context.Context, req domain.CalcualtionReques
 	return result, nil
 }
 
-func (c *Calcualator) ApplyMultipliers(req domain.CalcualtionRequest) AppliedMultipliers {
+func (c *Calculator) ApplyMultipliers(req domain.CalculationRequest) AppliedMultipliers {
 	config := c.multipliers
 	if config.DefaultComplexityMultiplier == 0 {
 		config.DefaultComplexityMultiplier = 1
@@ -145,14 +147,15 @@ func (c *Calcualator) ApplyMultipliers(req domain.CalcualtionRequest) AppliedMul
 
 	wastePercent := config.DefaultWastePercent
 	if req.Material != nil {
-		for _, key := range []string{req.Material.Type, req.Material.Code, req.Material.Name} {
-			if configuredWaste, ok := config.MaterialWastePercent[normalizeMultiplierKey(key)]; ok {
-				wastePercent = configuredWaste
-				break
-			}
+		if configuredWaste, ok := lookupMultiplier(config.MaterialWastePercent, req.Material.Type); ok {
+			wastePercent = configuredWaste
+		} else if configuredWaste, ok := lookupMultiplier(config.MaterialWastePercent, req.Material.Code); ok {
+			wastePercent = configuredWaste
+		} else if configuredWaste, ok := lookupMultiplier(config.MaterialWastePercent, req.Material.Name); ok {
+			wastePercent = configuredWaste
 		}
 	}
-	if configuredWaste, ok := config.MaterialWastePercent[normalizeMultiplierKey(req.MaterialCode)]; ok {
+	if configuredWaste, ok := lookupMultiplier(config.MaterialWastePercent, req.MaterialCode); ok {
 		wastePercent = configuredWaste
 	}
 	if req.WastePercent > 0 {
@@ -160,7 +163,7 @@ func (c *Calcualator) ApplyMultipliers(req domain.CalcualtionRequest) AppliedMul
 	}
 
 	complexityMultiplier := config.DefaultComplexityMultiplier
-	if configuredComplexity, ok := config.PatternComplexityMultipliers[normalizeMultiplierKey(req.Pattern)]; ok {
+	if configuredComplexity, ok := lookupMultiplier(config.PatternComplexityMultipliers, req.Pattern); ok {
 		complexityMultiplier = configuredComplexity
 	}
 	if req.ComplexityMultiplier > 0 {
@@ -173,18 +176,24 @@ func (c *Calcualator) ApplyMultipliers(req domain.CalcualtionRequest) AppliedMul
 	}
 }
 
-func CalculateSurfaceArea(wall domain.WallDimenstions, voids []domain.Void) (SurfaceAreaCalculation, error) {
+func CalculateSurfaceArea(wall domain.WallDimensions, voids []domain.Void) (SurfaceAreaCalculation, error) {
+	return calculateSurfaceArea(wall, voids, true)
+}
+
+func calculateSurfaceArea(wall domain.WallDimensions, voids []domain.Void, validateVoids bool) (SurfaceAreaCalculation, error) {
 	totalWallArea := wall.SurfaceArea()
 	if totalWallArea <= 0 {
 		return SurfaceAreaCalculation{}, fmt.Errorf("total wall area must be > 0, got %f", totalWallArea)
 	}
 
 	var voidArea float64
-	for i, void := range voids {
-		if void.WidthM < 0 || void.HeightM < 0 {
+	for i := range voids {
+		width := voids[i].WidthM
+		height := voids[i].HeightM
+		if validateVoids && (width < 0 || height < 0) {
 			return SurfaceAreaCalculation{}, fmt.Errorf("void[%d] dimensions can not be negative", i)
 		}
-		voidArea += void.Area()
+		voidArea += width * height
 	}
 
 	if voidArea > totalWallArea {
@@ -269,6 +278,10 @@ func normalizeMultiplierConfig(config MultiplierConfig) MultiplierConfig {
 }
 
 func normalizeFloatMapKeys(values map[string]float64) map[string]float64 {
+	if len(values) == 0 {
+		return values
+	}
+
 	normalized := make(map[string]float64, len(values))
 	for key, value := range values {
 		normalized[normalizeMultiplierKey(key)] = value
@@ -276,6 +289,27 @@ func normalizeFloatMapKeys(values map[string]float64) map[string]float64 {
 	return normalized
 }
 
+func lookupMultiplier(values map[string]float64, key string) (float64, bool) {
+	if len(values) == 0 {
+		return 0, false
+	}
+
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return 0, false
+	}
+
+	value, ok := values[normalizeTrimmedMultiplierKey(key)]
+	return value, ok
+}
+
 func normalizeMultiplierKey(value string) string {
-	return strings.ToLower(strings.ReplaceAll(strings.TrimSpace(value), " ", "-"))
+	return normalizeTrimmedMultiplierKey(strings.TrimSpace(value))
+}
+
+func normalizeTrimmedMultiplierKey(value string) string {
+	if strings.Contains(value, " ") {
+		value = strings.ReplaceAll(value, " ", "-")
+	}
+	return strings.ToLower(value)
 }

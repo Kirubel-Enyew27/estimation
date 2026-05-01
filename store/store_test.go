@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"estimation/service"
 	"os"
 	"path/filepath"
 	"testing"
@@ -23,8 +24,8 @@ func TestLoadMaterialCatalogLooksUpByMaterialType(t *testing.T) {
 		t.Fatalf("GetByType returned error: %v", err)
 	}
 
-	if material.Type != "Fieldstone" {
-		t.Fatalf("got type %q, want Fieldstone", material.Type)
+	if material.Type != "fieldstone" {
+		t.Fatalf("got type %q, want fieldstone", material.Type)
 	}
 	if material.DensityKgPerM3 != 2400 {
 		t.Fatalf("got cost per ton %f, want 2400", material.DensityKgPerM3)
@@ -80,8 +81,8 @@ func TestMaterialCatalogReturnsNotFoundForUnknownType(t *testing.T) {
 	}
 
 	_, err = catalog.GetByType(context.Background(), "granite")
-	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("got err %v, want ErrNotFound", err)
+	if !errors.Is(err, service.ErrMaterialNotFound) {
+		t.Fatalf("got err %v, want ErrMaterialNotFound", err)
 	}
 }
 
