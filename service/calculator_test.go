@@ -271,9 +271,9 @@ func TestCalculatorEstimateAppliesConfiguredMultipliersToFinalMaterialEstimate(t
 func TestCalculatorEstimateLookUpMaterialByType(t *testing.T) {
 	catalog, err := store.NewMaterialCatalog([]domain.Material{
 		{
-			Type: "limestine",
-			DensityKgPerM3: 2300,
-			CostPerTon: 110,
+			Type:                   "limestone",
+			DensityKgPerM3:         2300,
+			CostPerTon:             110,
 			CoverageRateM2PerRonne: 1.7,
 		},
 	})
@@ -285,8 +285,8 @@ func TestCalculatorEstimateLookUpMaterialByType(t *testing.T) {
 	got, err := Calculator.Estimate(context.Background(), domain.CalcualtionRequest{
 		MaterialCode: "Limestone",
 		Wall: domain.WallDimenstions{
-			LengthM: 6,
-			HeightM: 2,
+			LengthM:    6,
+			HeightM:    2,
 			ThicknessM: 0.2,
 		},
 		ComplexityMultiplier: 1,

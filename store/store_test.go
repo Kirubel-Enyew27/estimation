@@ -10,7 +10,7 @@ import (
 
 func TestLoadMaterialCatalogLooksUpByMaterialType(t *testing.T) {
 	path := writeCatalog(t, `[
-		{"type":"fieldstone","density":2400,"cost_per_ton":95,"coverage_rate":1.5}
+		{"type":"Fieldstone","density":2400,"cost_per_ton":95,"coverage_rate":1.5}
 	]`)
 
 	catalog, err := LoadMaterialCatalog(path)
@@ -75,7 +75,7 @@ func TestMaterialCatalogReturnsNotFoundForUnknownType(t *testing.T) {
 	catalog, err := NewMaterialCatalogFromJSON(t, `[
 		{"type":"brick","density":1800,"cost_per_ton":65,"coverage_rate":2.2}
 	]`)
-		if err != nil {
+	if err != nil {
 		t.Fatalf("NewMaterialCatalog returned error: %v", err)
 	}
 
@@ -85,7 +85,7 @@ func TestMaterialCatalogReturnsNotFoundForUnknownType(t *testing.T) {
 	}
 }
 
-func NewMaterialCatalogFromJSON(t *testing.T, content string)(*MaterialCatalog, error) {
+func NewMaterialCatalogFromJSON(t *testing.T, content string) (*MaterialCatalog, error) {
 	t.Helper()
 	return LoadMaterialCatalog(writeCatalog(t, content))
 }
